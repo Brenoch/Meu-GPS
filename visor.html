@@ -1,22 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Monitor Satélite Grátis</title>
+    <title>Monitor Satélite Híbrido</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-    <style>
-        #map { height: 100vh; width: 100%; margin: 0; }
-        .painel { position: absolute; top: 10px; left: 10px; z-index: 1000; background: white; padding: 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); font-family: sans-serif; }
-    </style>
+    <style> #map { height: 100vh; width: 100%; } </style>
 </head>
 <body>
-    <div class="painel">
-        <div id="status">Aguardando GPS...</div>
-    </div>
     <div id="map"></div>
-
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyCWUj1EeqGK9bsFVBhSt2tQHLfdl3mC0kQ",
@@ -26,27 +19,48 @@
         };
         firebase.initializeApp(firebaseConfig);
 
-        // Inicializa o mapa
         const map = L.map('map').setView([-15.78, -47.92], 4);
+        
+        // MAPA SATÉLITE COM NOMES DE RUAS (Esri Hybrid)
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
+        L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}').addTo(map);
 
-        // CAMADA DE SATÉLITE GRÁTIS (Parece o Google Earth)
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community'
-        }).addTo(map);
+        let markers = {}; // Objeto para guardar os marcadores de cada celular
+        let primeiraVez = true;
 
-        let marker = L.marker([0, 0]).addTo(map);
-
-        firebase.database().ref('localizacao_viva').on('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data && data.lat && data.lng) {
-                document.getElementById('status').innerText = "📍 Sinal Recebido!";
-
-                // Delay de 5 segundos e Zoom
-                setTimeout(() => {
+        firebase.database().ref('dispositivos').on('value', (snapshot) => {
+            const dispositivos = snapshot.val();
+            
+            if (dispositivos) {
+                Object.keys(dispositivos).forEach((id) => {
+                    const data = dispositivos[id];
                     const pos = [data.lat, data.lng];
-                    marker.setLatLng(pos);
-                    map.setView(pos, 18); // Zoom máximo para ver detalhes
-                }, 5000);
+
+                    // Se o marcador deste celular não existe, cria um
+                    if (!markers[id]) {
+                        markers[id] = L.marker(pos).addTo(map).bindPopup(id).openPopup();
+                    } else {
+                        // Se já existe, apenas move (com o delay de 5s que você pediu)
+                        setTimeout(() => {
+                            markers[id].setLatLng(pos);
+                        }, 5000);
+                    }
+
+                    // APROXIMAÇÃO: Só faz o zoom na primeira vez que o site recebe QUALQUER dado
+                    if (primeiraVez) {
+                        map.setView(pos, 17);
+                        primeiraVez = false;
+                    }
+                });
+            }
+        });
+
+        // Remove marcadores se o dispositivo sair do banco
+        firebase.database().ref('dispositivos').on('child_removed', (snapshot) => {
+            const id = snapshot.key;
+            if (markers[id]) {
+                map.removeLayer(markers[id]);
+                delete markers[id];
             }
         });
     </script>
