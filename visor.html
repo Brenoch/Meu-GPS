@@ -1,15 +1,22 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
-    <title>Monitor Satélite Híbrido</title>
+    <meta charset="UTF-8">
+    <title>Monitor Satélite Híbrido - Multi-GPS</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-    <style> #map { height: 100vh; width: 100%; } </style>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; }
+        #map { height: 100vh; width: 100%; }
+        .legend { position: absolute; top: 10px; right: 10px; z-index: 1000; background: white; padding: 10px; border-radius: 5px; font-family: sans-serif; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+    </style>
 </head>
 <body>
+    <div class="legend"><b>Monitor de Frota</b><br>Satélite Híbrido Ativo</div>
     <div id="map"></div>
+
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyCWUj1EeqGK9bsFVBhSt2tQHLfdl3mC0kQ",
@@ -20,48 +27,44 @@
         firebase.initializeApp(firebaseConfig);
 
         const map = L.map('map').setView([-15.78, -47.92], 4);
-        
-        // MAPA SATÉLITE COM NOMES DE RUAS (Esri Hybrid)
+
+        // Camada 1: Satélite (Esri World Imagery)
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
+        // Camada 2: Nomes de Ruas e Fronteiras (Esri Hybrid Overlay)
         L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}').addTo(map);
 
-        let markers = {}; // Objeto para guardar os marcadores de cada celular
+        let markers = {};
         let primeiraVez = true;
 
+        function formatarTempo(ts) {
+            const diff = Math.floor((Date.now() - ts) / 1000);
+            if (diff < 60) return `agora`;
+            return `há ${Math.floor(diff/60)} min`;
+        }
+
         firebase.database().ref('dispositivos').on('value', (snapshot) => {
-            const dispositivos = snapshot.val();
-            
-            if (dispositivos) {
-                Object.keys(dispositivos).forEach((id) => {
-                    const data = dispositivos[id];
-                    const pos = [data.lat, data.lng];
+            const lista = snapshot.val();
+            if (!lista) return;
 
-                    // Se o marcador deste celular não existe, cria um
-                    if (!markers[id]) {
-                        markers[id] = L.marker(pos).addTo(map).bindPopup(id).openPopup();
-                    } else {
-                        // Se já existe, apenas move (com o delay de 5s que você pediu)
-                        setTimeout(() => {
-                            markers[id].setLatLng(pos);
-                        }, 5000);
-                    }
+            Object.keys(lista).forEach((id) => {
+                const data = lista[id];
+                const pos = [data.lat, data.lng];
+                const popupContent = `<b>ID:</b> ${id}<br><b>Status:</b> ${data.status}<br><b>Visto:</b> ${formatarTempo(data.horario)}`;
 
-                    // APROXIMAÇÃO: Só faz o zoom na primeira vez que o site recebe QUALQUER dado
+                if (!markers[id]) {
+                    // Cria marcador novo
+                    markers[id] = L.marker(pos).addTo(map).bindPopup(popupContent);
                     if (primeiraVez) {
-                        map.setView(pos, 17);
+                        map.setView(pos, 17); // Zoom apenas na primeira vez que o site abre
                         primeiraVez = false;
                     }
-                });
-            }
-        });
-
-        // Remove marcadores se o dispositivo sair do banco
-        firebase.database().ref('dispositivos').on('child_removed', (snapshot) => {
-            const id = snapshot.key;
-            if (markers[id]) {
-                map.removeLayer(markers[id]);
-                delete markers[id];
-            }
+                } else {
+                    // Delay de 5 segundos solicitado
+                    setTimeout(() => {
+                        markers[id].setLatLng(pos).setPopupContent(popupContent);
+                    }, 5000);
+                }
+            });
         });
     </script>
 </body>
