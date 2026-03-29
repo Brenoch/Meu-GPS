@@ -3,111 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rastreador GPS - Celular</title>
-
+    <title>Rastreador Multi-Dispositivos</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #f0f2f5; }
-        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; width: 80%; }
-        h1 { color: #1c1e21; font-size: 1.5rem; }
-        button { width: 100%; padding: 20px; font-size: 1.1rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.3s; margin-top: 20px; }
-        .btn-start { background-color: #28a745; color: white; }
-        .btn-stop { background-color: #dc3545; color: white; }
-        #status { margin-top: 15px; font-weight: bold; color: #555; }
-    </style>
 </head>
-<body>
-
-    <div class="card">
-        <h1>Rastreador de Celular</h1>
-        <p>Clique abaixo para enviar sua posição em tempo real para o monitor.</p>
-
-        <button id="btnAction" class="btn-start" onclick="toggleTracking()">INICIAR RASTREIO</button>
-        <div id="status">Status: Offline</div>
+<body style="text-align:center; font-family:sans-serif; padding-top:50px; background:#f0f2f5;">
+    <div style="background:white; padding:30px; border-radius:15px; display:inline-block; box-shadow:0 4px 10px rgba(0,0,0,0.1);">
+        <h2>Rastreador GPS</h2>
+        <p id="dev-id" style="color:#888;"></p>
+        <button id="btn" onclick="toggleGPS()" style="padding:20px; width:200px; background:#28a745; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">INICIAR</button>
+        <p id="status">Status: Offline</p>
     </div>
 
     <script>
-        // CONFIGURAÇÃO DO SEU FIREBASE (Baseado nas suas imagens)
         const firebaseConfig = {
             apiKey: "AIzaSyCWUj1EeqGK9bsFVBhSt2tQHLfdl3mC0kQ",
-            authDomain: "projeto-devmobile-16ceb.firebaseapp.com",
             databaseURL: "https://projeto-devmobile-16ceb-default-rtdb.firebaseio.com",
             projectId: "projeto-devmobile-16ceb",
-            storageBucket: "projeto-devmobile-16ceb.firebasestorage.app",
-            messagingSenderId: "74789381923",
             appId: "1:74789381923:web:f4f01cd5439ca895730e96"
         };
-
-        // Inicializa Firebase
         firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
+
+        // Gera um ID único para este celular para não atropelar outros dispositivos
+        const deviceId = "Celular_" + Math.floor(Math.random() * 9000 + 1000);
+        document.getElementById('dev-id').innerText = "ID do Aparelho: " + deviceId;
 
         let watchId = null;
 
-        function toggleTracking() {
-            const btn = document.getElementById('btnAction');
-            const statusTxt = document.getElementById('status');
-
+        function toggleGPS() {
+            const btn = document.getElementById('btn');
             if (!watchId) {
-                // INICIAR RASTREIO
-                if ("geolocation" in navigator) {
-                    statusTxt.innerText = "Buscando sinal GPS...";
-
-                    watchId = navigator.geolocation.watchPosition((position) => {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
-
-                        // ENVIANDO PARA O FIREBASE
-                        // Usamos .set() para sobrescrever a posição atual
-                        database.ref('localizacao_viva').set({
-                            lat: lat,
-                            lng: lng,
-                            timestamp: Date.now()
-                        }).then(() => {
-                            statusTxt.innerText = "📍 Enviando: " + lat.toFixed(5) + ", " + lng.toFixed(5);
-                            statusTxt.style.color = "#28a745";
-                        }).catch((error) => {
-                            statusTxt.innerText = "Erro no Firebase: " + error.message;
-                            statusTxt.style.color = "#dc3545";
-                        });
-
-                    }, (error) => {
-                        alert("Erro de GPS: " + error.message);
-                        stopTracking();
-                    }, {
-                        enableHighAccuracy: true, // Força o uso do GPS real e não apenas Wi-Fi
-                        maximumAge: 0,
-                        timeout: 10000
-                    });
-
-                    btn.innerText = "PARAR RASTREIO";
-                    btn.className = "btn-stop";
-                } else {
-                    alert("Seu navegador não suporta GPS.");
-                }
+                watchId = navigator.geolocation.watchPosition((pos) => {
+                    const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude, deviceId: deviceId };
+                    // Salva no nó específico deste ID
+                    firebase.database().ref('dispositivos/' + deviceId).set(coords);
+                    document.getElementById('status').innerText = "Enviando localização...";
+                }, (err) => alert(err.message), { enableHighAccuracy: true });
+                btn.innerText = "PARAR";
+                btn.style.background = "#dc3545";
             } else {
-                stopTracking();
-            }
-        }
-
-        function stopTracking() {
-            const btn = document.getElementById('btnAction');
-            const statusTxt = document.getElementById('status');
-
-            if (watchId) {
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
+                firebase.database().ref('dispositivos/' + deviceId).remove();
+                btn.innerText = "INICIAR";
+                btn.style.background = "#28a745";
+                document.getElementById('status').innerText = "Status: Parado";
             }
-
-            // Remove a localização do banco quando parar (opcional)
-            database.ref('localizacao_viva').remove();
-
-            btn.innerText = "INICIAR RASTREIO";
-            btn.className = "btn-start";
-            statusTxt.innerText = "Status: Parado";
-            statusTxt.style.color = "#555";
         }
     </script>
 </body>
