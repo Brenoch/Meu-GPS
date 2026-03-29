@@ -2,70 +2,100 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Monitor Satélite Híbrido - Multi-GPS</title>
+    <title>Monitor de Frota Protegido</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; }
-        #map { height: 100vh; width: 100%; }
-        .legend { position: absolute; top: 10px; right: 10px; z-index: 1000; background: white; padding: 10px; border-radius: 5px; font-family: sans-serif; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: sans-serif; }
+        #map { height: 100vh; width: 100%; display: none; } /* Escondido até acertar a senha */
+        #login { display: flex; align-items: center; justify-content: center; height: 100vh; background: #121212; color: white; flex-direction: column; }
+        input { padding: 15px; border-radius: 8px; border: none; margin-bottom: 10px; width: 250px; font-size: 1rem; }
+        button { padding: 15px 30px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="legend"><b>Monitor de Frota</b><br>Satélite Híbrido Ativo</div>
+
+    <div id="login">
+        <h2>Acesso Restrito ao Mapa</h2>
+        <input type="password" id="pass" placeholder="Digite a Senha">
+        <button onclick="verificarSenha()">Entrar no Monitor</button>
+    </div>
+
     <div id="map"></div>
 
     <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyCWUj1EeqGK9bsFVBhSt2tQHLfdl3mC0kQ",
-            databaseURL: "https://projeto-devmobile-16ceb-default-rtdb.firebaseio.com",
-            projectId: "projeto-devmobile-16ceb",
-            appId: "1:74789381923:web:f4f01cd5439ca895730e96"
-        };
-        firebase.initializeApp(firebaseConfig);
+        const SENHA_MESTRA = "1234"; // Defina sua senha aqui
 
-        const map = L.map('map').setView([-15.78, -47.92], 4);
-
-        // Camada 1: Satélite (Esri World Imagery)
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
-        // Camada 2: Nomes de Ruas e Fronteiras (Esri Hybrid Overlay)
-        L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}').addTo(map);
-
-        let markers = {};
-        let primeiraVez = true;
-
-        function formatarTempo(ts) {
-            const diff = Math.floor((Date.now() - ts) / 1000);
-            if (diff < 60) return `agora`;
-            return `há ${Math.floor(diff/60)} min`;
+        function verificarSenha() {
+            const digitada = document.getElementById('pass').value;
+            if (digitada === SENHA_MESTRA) {
+                document.getElementById('login').style.display = 'none';
+                document.getElementById('map').style.display = 'block';
+                iniciarMapa();
+            } else {
+                alert("Senha Incorreta!");
+            }
         }
 
-        firebase.database().ref('dispositivos').on('value', (snapshot) => {
-            const lista = snapshot.val();
-            if (!lista) return;
+        function iniciarMapa() {
+            const firebaseConfig = {
+                apiKey: "AIzaSyCWUj1EeqGK9bsFVBhSt2tQHLfdl3mC0kQ",
+                databaseURL: "https://projeto-devmobile-16ceb-default-rtdb.firebaseio.com",
+                projectId: "projeto-devmobile-16ceb",
+                appId: "1:74789381923:web:f4f01cd5439ca895730e96"
+            };
+            firebase.initializeApp(firebaseConfig);
 
-            Object.keys(lista).forEach((id) => {
-                const data = lista[id];
-                const pos = [data.lat, data.lng];
-                const popupContent = `<b>ID:</b> ${id}<br><b>Status:</b> ${data.status}<br><b>Visto:</b> ${formatarTempo(data.horario)}`;
+            const map = L.map('map').setView([-15.78, -47.92], 4);
+            
+            // Camadas Híbridas (Satélite + Ruas)
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
+            L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}').addTo(map);
 
-                if (!markers[id]) {
-                    // Cria marcador novo
-                    markers[id] = L.marker(pos).addTo(map).bindPopup(popupContent);
-                    if (primeiraVez) {
-                        map.setView(pos, 17); // Zoom apenas na primeira vez que o site abre
-                        primeiraVez = false;
-                    }
-                } else {
-                    // Delay de 5 segundos solicitado
-                    setTimeout(() => {
-                        markers[id].setLatLng(pos).setPopupContent(popupContent);
-                    }, 5000);
-                }
+            // CONFIGURAÇÃO DO ÍCONE DE ÔNIBUS
+            const iconOnibus = L.icon({
+                iconUrl: 'https://cdn-icons-png.flaticon.com/512/3448/3448339.png',
+                iconSize: [40, 40],
+                iconAnchor: [20, 40],
+                popupAnchor: [0, -40]
             });
-        });
+
+            let markers = {};
+            let primeiraVez = true;
+
+            function formatarTempo(ts) {
+                const diff = Math.floor((Date.now() - ts) / 1000);
+                return diff < 60 ? `agora` : `há ${Math.floor(diff/60)} min`;
+            }
+
+            firebase.database().ref('dispositivos').on('value', (snapshot) => {
+                const lista = snapshot.val();
+                if (!lista) return;
+
+                Object.keys(lista).forEach((id) => {
+                    const data = lista[id];
+                    const pos = [data.lat, data.lng];
+                    const popupContent = `<b>Bus ID:</b> ${id}<br><b>Status:</b> ${data.status}<br><b>Visto:</b> ${formatarTempo(data.horario)}`;
+
+                    if (!markers[id]) {
+                        // CRIA MARCADOR COM ÍCONE DE ÔNIBUS
+                        markers[id] = L.marker(pos, { icon: iconOnibus }).addTo(map).bindPopup(popupContent);
+                        
+                        if (primeiraVez) {
+                            map.setView(pos, 17);
+                            primeiraVez = false;
+                        }
+                    } else {
+                        // Delay de 5 segundos conforme solicitado
+                        setTimeout(() => {
+                            markers[id].setLatLng(pos).setPopupContent(popupContent);
+                        }, 5000);
+                    }
+                });
+            });
+        }
     </script>
 </body>
 </html>
