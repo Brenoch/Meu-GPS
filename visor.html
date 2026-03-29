@@ -2,27 +2,32 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Monitor de Frota Profissional</title>
+    <title>Monitor de Frota - Satélite Híbrido</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', sans-serif; }
         #map { height: 100vh; width: 100%; }
-        .info-box { position: absolute; top: 20px; left: 60px; z-index: 1000; background: white; padding: 15px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-left: 5px solid #0056b3; }
+        .painel-status {
+            position: absolute; top: 20px; left: 60px; z-index: 1000;
+            background: rgba(255, 255, 255, 0.9); padding: 15px;
+            border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            border-left: 5px solid #ffcc00;
+        }
     </style>
 </head>
 <body>
 
-    <div class="info-box">
-        <b style="color: #0056b3;">CENTRAL DE MONITORAMENTO</b><br>
-        <small id="track-count">Buscando dispositivos...</small>
+    <div class="painel-status">
+        <b style="color: #333;">CENTRAL DE MONITORAMENTO</b><br>
+        <small id="contador">Buscando sinais de satélite...</small>
     </div>
     <div id="map"></div>
 
     <script>
-        // CONFIGURAÇÃO FIREBASE
+        // CONFIGURAÇÃO FIREBASE (Suas chaves originais)
         const firebaseConfig = {
             apiKey: "AIzaSyCWUj1EeqGK9bsFVBhSt2tQHLfdl3mC0kQ",
             databaseURL: "https://projeto-devmobile-16ceb-default-rtdb.firebaseio.com",
@@ -31,14 +36,19 @@
         };
         firebase.initializeApp(firebaseConfig);
 
+        // Inicializa o mapa focado no Brasil
         const map = L.map('map').setView([-15.78, -47.92], 4);
 
-        // MAPA BONITO (ESTILO MODERNO COM RUAS) - Stadia Maps
-        // Substitua 'SUA_API_KEY' pela chave que você pegar no site do Stadia Maps
-        const apiKey = '76cef680-5c3f-429e-8958-5d1cba8f0084';
-        L.tileLayer(`https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=${apiKey}`, {
-            maxZoom: 20,
-            attribution: '&copy; Stadia Maps, &copy; OpenStreetMap contributors'
+        // --- AS CAMADAS DE SATÉLITE (SEM CARTÃO / SEM CHAVE) ---
+
+        // 1. Camada de Foto de Satélite (Esri World Imagery)
+        const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community'
+        }).addTo(map);
+
+        // 2. Camada de Nomes de Ruas e Cidades (Esri Reference Overlay)
+        const labels = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Labels &copy; Esri'
         }).addTo(map);
 
         // ÍCONE DE ÔNIBUS
@@ -52,28 +62,42 @@
         let markers = {};
         let primeiraVez = true;
 
-        firebase.database().ref('dispositivos').on('value', (snapshot) => {
-            const dataList = snapshot.val();
-            if (!dataList) return;
+        // Função para calcular tempo desde a última atualização
+        function tempoRelativo(ts) {
+            const segundos = Math.floor((Date.now() - ts) / 1000);
+            if (segundos < 60) return "agora";
+            return `há ${Math.floor(segundos / 60)} min`;
+        }
 
-            const ids = Object.keys(dataList);
-            document.getElementById('track-count').innerText = `${ids.length} ônibus ativos`;
+        firebase.database().ref('dispositivos').on('value', (snapshot) => {
+            const lista = snapshot.val();
+            if (!lista) return;
+
+            const ids = Object.keys(lista);
+            document.getElementById('contador').innerText = `${ids.length} dispositivo(s) rastreado(s)`;
 
             ids.forEach((id) => {
-                const info = dataList[id];
-                const pos = [info.lat, info.lng];
-                const popupTxt = `<b>Ônibus:</b> ${id}<br><b>Status:</b> ${info.status}`;
+                const data = lista[id];
+                const pos = [data.lat, data.lng];
+                const popupContent = `
+                    <b>ID:</b> ${id}<br>
+                    <b>Status:</b> <span style="color:${data.status === 'Online' ? 'green' : 'red'}">${data.status}</span><br>
+                    <b>Visto:</b> ${tempoRelativo(data.horario)}
+                `;
 
                 if (!markers[id]) {
-                    markers[id] = L.marker(pos, { icon: iconOnibus }).addTo(map).bindPopup(popupTxt);
+                    // Novo ônibus detectado
+                    markers[id] = L.marker(pos, { icon: iconOnibus }).addTo(map).bindPopup(popupContent);
+
+                    // ZOOM APENAS NA PRIMEIRA VEZ QUE O SITE ABRE
                     if (primeiraVez) {
-                        map.setView(pos, 16); // Zoom suave na primeira detecção
+                        map.setView(pos, 17); // Zoom aproximado na rua
                         primeiraVez = false;
                     }
                 } else {
-                    // O delay de 5 segundos que você pediu
+                    // DELAY DE 5 SEGUNDOS NO MOVIMENTO
                     setTimeout(() => {
-                        markers[id].setLatLng(pos).setPopupContent(popupTxt);
+                        markers[id].setLatLng(pos).setPopupContent(popupContent);
                     }, 5000);
                 }
             });
