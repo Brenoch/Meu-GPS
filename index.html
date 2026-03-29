@@ -3,16 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rastreador Multi-Dispositivos</title>
+    <title>GPS Tracker - Dispositivo</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <style>
+        body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #121212; color: white; }
+        .card { background: #1e1e1e; padding: 40px; border-radius: 20px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 85%; }
+        button { width: 100%; padding: 20px; font-size: 1.2rem; font-weight: bold; border: none; border-radius: 12px; cursor: pointer; transition: 0.3s; }
+        .on { background: #28a745; color: white; }
+        .off { background: #dc3545; color: white; }
+        #status { margin-top: 20px; font-size: 0.9rem; color: #bbb; }
+    </style>
 </head>
-<body style="text-align:center; font-family:sans-serif; padding-top:50px; background:#f0f2f5;">
-    <div style="background:white; padding:30px; border-radius:15px; display:inline-block; box-shadow:0 4px 10px rgba(0,0,0,0.1);">
-        <h2>Rastreador GPS</h2>
-        <p id="dev-id" style="color:#888;"></p>
-        <button id="btn" onclick="toggleGPS()" style="padding:20px; width:200px; background:#28a745; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">INICIAR</button>
-        <p id="status">Status: Offline</p>
+<body>
+    <div class="card">
+        <h2 id="dev-name">Aguardando ID...</h2>
+        <button id="btn" class="on" onclick="toggleGPS()">INICIAR RASTREIO</button>
+        <p id="status">Status: Desconectado</p>
     </div>
 
     <script>
@@ -24,9 +31,9 @@
         };
         firebase.initializeApp(firebaseConfig);
 
-        // Gera um ID único para este celular para não atropelar outros dispositivos
-        const deviceId = "Celular_" + Math.floor(Math.random() * 9000 + 1000);
-        document.getElementById('dev-id').innerText = "ID do Aparelho: " + deviceId;
+        // Gera um ID único para este celular
+        const deviceId = "GPS_" + Math.floor(Math.random() * 8999 + 1000);
+        document.getElementById('dev-name').innerText = deviceId;
 
         let watchId = null;
 
@@ -34,20 +41,26 @@
             const btn = document.getElementById('btn');
             if (!watchId) {
                 watchId = navigator.geolocation.watchPosition((pos) => {
-                    const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude, deviceId: deviceId };
-                    // Salva no nó específico deste ID
-                    firebase.database().ref('dispositivos/' + deviceId).set(coords);
-                    document.getElementById('status').innerText = "Enviando localização...";
-                }, (err) => alert(err.message), { enableHighAccuracy: true });
-                btn.innerText = "PARAR";
-                btn.style.background = "#dc3545";
+                    const dados = {
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        horario: Date.now(),
+                        status: "Online"
+                    };
+                    firebase.database().ref('dispositivos/' + deviceId).set(dados);
+                    document.getElementById('status').innerText = "📍 Transmitindo em tempo real...";
+                }, (err) => alert("Erro GPS: " + err.message), { enableHighAccuracy: true });
+                
+                btn.innerText = "PARAR RASTREIO";
+                btn.className = "off";
             } else {
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
-                firebase.database().ref('dispositivos/' + deviceId).remove();
-                btn.innerText = "INICIAR";
-                btn.style.background = "#28a745";
-                document.getElementById('status').innerText = "Status: Parado";
+                // Mantém a posição mas avisa que está Offline
+                firebase.database().ref('dispositivos/' + deviceId + '/status').set("Offline");
+                btn.innerText = "INICIAR RASTREIO";
+                btn.className = "on";
+                document.getElementById('status').innerText = "Status: Parado (Última salva)";
             }
         }
     </script>
