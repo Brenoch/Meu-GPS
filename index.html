@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Celular - Rastreador</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding-top: 50px; }
+        button { padding: 20px; font-size: 1.2rem; margin: 10px; width: 80%; cursor: pointer; }
+        #status { font-weight: bold; color: #555; }
+    </style>
+</head>
+<body>
+    <h1>Rastreador GPS</h1>
+    <button onclick="ligarGPS()" style="background: #4CAF50; color: white;">INICIAR RASTREIO</button>
+    <button onclick="desligarGPS()" style="background: #f44336; color: white;">PARAR RASTREIO</button>
+    <p id="status">Status: Desconectado</p>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCWUj1EeqGK9bsFVBhSt2tQHLfdl3mC0kQ",
+            databaseURL: "https://projeto-devmobile-16ceb-default-rtdb.firebaseio.com",
+            projectId: "projeto-devmobile-16ceb",
+            appId: "1:74789381923:web:f4f01cd5439ca895730e96"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const dbRef = firebase.database().ref('localizacao_viva');
+
+        let watchId = null;
+
+        function ligarGPS() {
+            if (watchId) return;
+            document.getElementById('status').innerText = "Status: Localizando...";
+
+            watchId = navigator.geolocation.watchPosition((pos) => {
+                const coords = {
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                    timestamp: Date.now()
+                };
+                // "set" sobrescreve o local antigo, mantendo apenas o ponto atual
+                dbRef.set(coords);
+                document.getElementById('status').innerText = `Enviando: ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`;
+            }, (err) => alert("Erro no GPS: " + err.message), { enableHighAccuracy: true });
+        }
+
+        function desligarGPS() {
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+                dbRef.remove(); // Remove o ponteiro do mapa ao parar
+                document.getElementById('status').innerText = "Status: Parado";
+            }
+        }
+    </script>
+</body>
+</html>
