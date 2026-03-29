@@ -1,25 +1,23 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Visor Google Maps - Firebase</title>
+    <title>Monitor Satélite Grátis</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-    <script src="https://maps.googleapis.com/maps/api/js?key=SUA_CHAVE_AQUI&callback=initMap" async defer></script>
     <style>
-        #map { height: 100vh; width: 100%; }
-        .painel { position: absolute; top: 10px; left: 10px; z-index: 5; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); font-family: Arial; }
+        #map { height: 100vh; width: 100%; margin: 0; }
+        .painel { position: absolute; top: 10px; left: 10px; z-index: 1000; background: white; padding: 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); font-family: sans-serif; }
     </style>
 </head>
 <body>
     <div class="painel">
-        <div id="status">Aguardando sinal do celular...</div>
+        <div id="status">Aguardando GPS...</div>
     </div>
     <div id="map"></div>
 
     <script>
-        let map, marker;
-
-        // Configurações do seu Firebase (extraídas da sua imagem anterior)
         const firebaseConfig = {
             apiKey: "AIzaSyCWUj1EeqGK9bsFVBhSt2tQHLfdl3mC0kQ",
             databaseURL: "https://projeto-devmobile-16ceb-default-rtdb.firebaseio.com",
@@ -28,32 +26,29 @@
         };
         firebase.initializeApp(firebaseConfig);
 
-        function initMap() {
-            // Inicializa o mapa focado no Brasil
-            map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 4,
-                center: { lat: -15.78, lng: -47.92 },
-            });
-            marker = new google.maps.Marker({ map: map });
+        // Inicializa o mapa
+        const map = L.map('map').setView([-15.78, -47.92], 4);
 
-            // Escuta o nó 'localizacao_viva' que o celular envia
-            firebase.database().ref('localizacao_viva').on('value', (snapshot) => {
-                const data = snapshot.val();
-                if (data && data.lat && data.lng) {
+        // CAMADA DE SATÉLITE GRÁTIS (Parece o Google Earth)
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community'
+        }).addTo(map);
 
-                    // Aplica o delay de 5 segundos que você solicitou
-                    setTimeout(() => {
-                        const pos = { lat: data.lat, lng: data.lng };
+        let marker = L.marker([0, 0]).addTo(map);
 
-                        marker.setPosition(pos);
-                        map.setCenter(pos);
-                        map.setZoom(17); // Zoom aproximado para ver a rua
+        firebase.database().ref('localizacao_viva').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data && data.lat && data.lng) {
+                document.getElementById('status').innerText = "📍 Sinal Recebido!";
 
-                        document.getElementById('status').innerText = "Localização Atualizada!";
-                    }, 5000);
-                }
-            });
-        }
+                // Delay de 5 segundos e Zoom
+                setTimeout(() => {
+                    const pos = [data.lat, data.lng];
+                    marker.setLatLng(pos);
+                    map.setView(pos, 18); // Zoom máximo para ver detalhes
+                }, 5000);
+            }
+        });
     </script>
 </body>
 </html>
